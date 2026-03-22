@@ -19,4 +19,15 @@ func main() {
 
 	cmd.Execute()
 
+// 	img := state.Image{
+// 	Name:    "myapp",
+// 	Tag:     "latest",
+// 	Digest:  "sha256:dummyhash123456789",
+// 	Created: "2026-03-22T10:00:00Z",
+// 	Config:  state.Config{},
+// 	Layers:  []state.Layer{},
+// }
+//
+// state.SaveImage(img)
+
 }
