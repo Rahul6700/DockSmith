@@ -2,7 +2,7 @@ package state
 
 import (
 	"os"
-	"path/filename"
+	"path/filepath"
 )
 
 // helper func, used down

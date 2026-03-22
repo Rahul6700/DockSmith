@@ -5,6 +5,7 @@ import (
 	"os"
 	// other packages
 	"docksmith/state"
+	"docksmith/cmd"
 )
 
 func main() {
@@ -15,5 +16,7 @@ func main() {
 		fmt.Println("Error initializing state:", err)
 		os.Exit(1)
 	}
+
+	cmd.Execute()
 
 }
