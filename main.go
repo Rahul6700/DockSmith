@@ -29,5 +29,12 @@ func main() {
 // }
 //
 // state.SaveImage(img)
+//
+// layer, err := state.CreateLayerFromDir(".")
+// if err != nil {
+// 	panic(err)
+// }
+//
+// fmt.Println("Layer created:", layer.Digest)
 
 }
