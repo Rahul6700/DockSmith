@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 )
 
+// the image is ultimately the metadata + the ordered list of layers
+
 // struct for the image
 type Image struct {
 	Name    string   `json:"name"` // eg -> myapp
