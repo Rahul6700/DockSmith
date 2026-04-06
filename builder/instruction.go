@@ -5,7 +5,11 @@ package builder
 type InstructionType string
 
 const (
-	COPY InstructionType = "COPY"
+	COPY    InstructionType = "COPY"
+	RUN     InstructionType = "RUN"
+	WORKDIR InstructionType = "WORKDIR"
+	ENV     InstructionType = "ENV"
+	CMD     InstructionType = "CMD"
 )
 
 // if my inst is COPY . /app then,

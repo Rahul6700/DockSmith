@@ -1,3 +1,4 @@
+// hash.go
 package state
 
 import (

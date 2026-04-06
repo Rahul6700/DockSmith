@@ -1,3 +1,4 @@
+// image.go
 package state
 
 import (

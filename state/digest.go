@@ -1,3 +1,4 @@
+// digest.go
 package state
 
 import (

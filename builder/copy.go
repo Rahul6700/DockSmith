@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -17,33 +18,27 @@ func copyDir(src, dest string) error {
 		if err != nil {
 			return err
 		}
-
 		rel, err := filepath.Rel(src, path)
 		if err != nil {
 			return err
 		}
-
 		target := filepath.Join(dest, rel)
-
 		if info.IsDir() {
 			return os.MkdirAll(target, 0755)
 		}
-
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
-
 		return os.WriteFile(target, data, 0644)
 	})
 }
 
-func ExecuteCopy(src, dest, contextDir, workDir string) (string, error) {
-
+func ExecuteCopy(src, dest, contextDir, workDir string) (state.Layer, error) {
 	// we make a temp dir, which is deleted once the func returns
 	tmpDir, err := os.MkdirTemp("", "docksmith-build-*")
 	if err != nil {
-		return "", err
+		return state.Layer{}, err
 	}
 	defer os.RemoveAll(tmpDir)
 
@@ -52,17 +47,19 @@ func ExecuteCopy(src, dest, contextDir, workDir string) (string, error) {
 	// tempDir is used to construct the layer
 	srcPath := filepath.Join(contextDir, src)
 	destPath := filepath.Join(tmpDir, dest)
-
 	err = copyDir(srcPath, destPath)
 	if err != nil {
-		return "", err
+		return state.Layer{}, err
 	}
 
 	// create layer from temp dir
 	layer, err := state.CreateLayerFromDir(tmpDir)
 	if err != nil {
-		return "", err
+		return state.Layer{}, err
 	}
 
-	return layer.Digest, nil
+	// record which instruction created this layer
+	layer.CreatedBy = fmt.Sprintf("COPY %s %s", src, dest)
+
+	return layer, nil
 }

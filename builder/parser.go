@@ -8,7 +8,7 @@ import (
 )
 
 func ParseDocksmithfile(path string) ([]Instruction, error) {
-	
+
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -31,22 +31,41 @@ func ParseDocksmithfile(path string) ([]Instruction, error) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		
+
 		// strings.Fields(line) splits the string into an arr based on whitespaces
 		parts := strings.Fields(line) // ex -> "COPY src.txt dest.txt" becomes ["COPY", "src.txt", "dest.txt"]
 		if len(parts) == 0 {
 			continue
 		}
-	
+
 		// switch case for the first element of the arr (the inst basically), eg -> COPY, RUN, INSTALL
 		switch parts[0] {
-
 		case "COPY":
 			if len(parts) != 3 {
 				return nil, fmt.Errorf("invalid COPY at line %d", lineNum)
 			}
 			instructions = append(instructions, Instruction{
 				Type: COPY,
+				Args: parts[1:],
+			})
+
+		case "RUN":
+			if len(parts) < 2 {
+				return nil, fmt.Errorf("RUN requires a command at line %d", lineNum)
+			}
+			// strings.Join preserves spaces in the command eg -> "pip install flask" stays intact
+			command := strings.Join(parts[1:], " ")
+			instructions = append(instructions, Instruction{
+				Type: RUN,
+				Args: []string{command},
+			})
+
+		case "WORKDIR":
+			if len(parts) != 2 {
+				return nil, fmt.Errorf("WORKDIR requires 1 arg at line %d", lineNum)
+			}
+			instructions = append(instructions, Instruction{
+				Type: WORKDIR,
 				Args: parts[1:],
 			})
 
