@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,6 +18,31 @@ import (
 // if the image is called myapp:latest
 // latest is the tag
 var tag string
+
+// hashContextFiles walks the src dir inside contextDir and hashes all file contents
+// this is used as part of the COPY cache key so that changing any file busts the cache
+func hashContextFiles(contextDir, src string) string {
+	srcPath := filepath.Join(contextDir, src)
+	h := sha256.New()
+
+	filepath.Walk(srcPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		// hash the relative path + file contents
+		// so renaming a file also busts the cache
+		rel, _ := filepath.Rel(srcPath, path)
+		h.Write([]byte(rel))
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		h.Write(data)
+		return nil
+	})
+
+	return fmt.Sprintf("sha256:%x", h.Sum(nil))
+}
 
 // the build function takes an dir and converts it into an image
 // it takes a dir, content hashes it and creates a layer (a .tar file)
@@ -41,6 +69,17 @@ var buildCmd = &cobra.Command{
 			return
 		}
 		name, tagVal = parts[0], parts[1]
+
+		// load .docksmithignore patterns from the context dir
+		// if the file doesnt exist, patterns will be empty and nothing gets ignored
+		patterns, err := builder.LoadIgnorePatterns(contextDir)
+		if err != nil {
+			fmt.Println("Error reading .docksmithignore:", err)
+			return
+		}
+		if len(patterns) > 0 {
+			fmt.Printf("Loaded %d ignore pattern(s) from .docksmithignore\n", len(patterns))
+		}
 
 		// parse Docksmithfile
 		instructions, err := builder.ParseDocksmithfile("Docksmithfile")
@@ -74,10 +113,12 @@ var buildCmd = &cobra.Command{
 
 			switch inst.Type {
 			case builder.COPY:
-				// compute cache key from previous layer + this instruction
-				// if the files being copied changed, the layer digest will differ on execution
-				// and a new cache entry will be stored
-				cacheKey := state.ComputeCacheKey(prevDigest, string(inst.Type), inst.Args)
+				// hash the actual source files so that changing any file busts the cache
+				// without this, the cache key only depends on the instruction args (src, dest)
+				// and would never invalidate even if file contents changed
+				contentHash := hashContextFiles(contextDir, inst.Args[0])
+				cacheKeyArgs := append(inst.Args, contentHash)
+				cacheKey := state.ComputeCacheKey(prevDigest, string(inst.Type), cacheKeyArgs)
 
 				if entry := state.GetCacheEntry(cacheKey); entry != nil {
 					// cache hit -> skip execution, reuse stored layer
@@ -88,7 +129,8 @@ var buildCmd = &cobra.Command{
 				}
 
 				// cache miss -> execute and store result
-				layer, err := builder.ExecuteCopy(inst.Args[0], inst.Args[1], contextDir, workDir)
+				// patterns from .docksmithignore are passed in so copyDir can filter files
+				layer, err := builder.ExecuteCopy(inst.Args[0], inst.Args[1], contextDir, workDir, patterns)
 				if err != nil {
 					fmt.Println("COPY failed:", err)
 					return
@@ -182,4 +224,3 @@ func init() {
 	buildCmd.Flags().StringVarP(&tag, "tag", "t", "", "name:tag")
 	rootCmd.AddCommand(buildCmd)
 }
-

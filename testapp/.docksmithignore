@@ -1,0 +1,5 @@
+# ignore logs
+*.log
+
+# ignore dependencies
+node_modules
