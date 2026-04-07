@@ -10,7 +10,7 @@ import (
 	"docksmith/state"
 )
 
-func ExecuteRun(command string, layers []state.Layer, workDir string) (state.Layer, error) {
+func ExecuteRun(command string, layers []state.Layer, workDir string, envVars []string) (state.Layer, error) {
 	// create temp rootfs
 	tmpDir, err := os.MkdirTemp("", "docksmith-run-*")
 	if err != nil {
@@ -46,6 +46,16 @@ func ExecuteRun(command string, layers []state.Layer, workDir string) (state.Lay
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = nil
+
+	// build the environment for the child process
+	// os.Environ() gives us the current host environment (so PATH, HOME etc still work)
+	// we then append our accumulated ENV vars on top
+	// if the same key exists in both, the later one wins (shell behaviour)
+	cmd.Env = append(os.Environ(), envVars...)
+
+	if len(envVars) > 0 {
+		fmt.Printf("  [RUN] env vars: %v\n", envVars)
+	}
 
 	// 🔒 namespace isolation
 	// CLONE_NEWUSER -> own user namespace

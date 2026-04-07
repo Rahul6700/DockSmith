@@ -1,3 +1,6 @@
 COPY . /app
 WORKDIR /app
-RUN ls
+ENV GREETING=hello
+ENV TARGET=docksmith
+RUN echo $GREETING $TARGET
+CMD echo "container started"

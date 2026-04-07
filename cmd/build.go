@@ -55,13 +55,21 @@ var buildCmd = &cobra.Command{
 		// WORKDIR sets this, and RUN + COPY respect it
 		workDir := ""
 
+		// accumulate ENV vars across instructions in KEY=VALUE format
+		// each ENV line appends to this slice
+		// all of these get passed into every subsequent RUN command
+		var envVars []string
+
+		// stores the last CMD seen — last one wins
+		var cmdArgs []string
+
 		// execute instructions
 		for i, inst := range instructions {
 			fmt.Printf("Step %d/%d : %s %s\n", i+1, len(instructions), inst.Type, strings.Join(inst.Args, " "))
 
 			switch inst.Type {
 			case builder.COPY:
-				// ExecuteCopy now returns a full Layer struct, not just a digest string
+				// ExecuteCopy returns a full Layer struct with digest, size, createdBy
 				layer, err := builder.ExecuteCopy(inst.Args[0], inst.Args[1], contextDir, workDir)
 				if err != nil {
 					fmt.Println("COPY failed:", err)
@@ -70,8 +78,9 @@ var buildCmd = &cobra.Command{
 				layers = append(layers, layer)
 
 			case builder.RUN:
-				// ExecuteRun now returns a full Layer struct, not just a digest string
-				layer, err := builder.ExecuteRun(inst.Args[0], layers, workDir)
+				// ExecuteRun returns a full Layer struct with digest, size, createdBy
+				// we pass envVars so the child process sees all accumulated ENV instructions
+				layer, err := builder.ExecuteRun(inst.Args[0], layers, workDir, envVars)
 				if err != nil {
 					fmt.Println("RUN failed:", err)
 					return
@@ -81,6 +90,17 @@ var buildCmd = &cobra.Command{
 			case builder.WORKDIR:
 				workDir = inst.Args[0]
 				fmt.Printf("  [WORKDIR] set to %s\n", workDir)
+
+			case builder.ENV:
+				// append this KEY=VALUE to our accumulated env list
+				// all subsequent RUN commands will see it
+				envVars = append(envVars, inst.Args[0])
+				fmt.Printf("  [ENV] %s\n", inst.Args[0])
+
+			case builder.CMD:
+				// overwrite cmdArgs each time — last CMD wins
+				cmdArgs = inst.Args
+				fmt.Printf("  [CMD] %s\n", inst.Args[0])
 			}
 		}
 
@@ -91,6 +111,8 @@ var buildCmd = &cobra.Command{
 			Digest:  "",
 			Created: time.Now().UTC().Format(time.RFC3339),
 			Config: state.Config{
+				Env:        envVars, // all accumulated ENV vars
+				Cmd:        cmdArgs, // last CMD seen (or nil if none)
 				WorkingDir: workDir, // populated from WORKDIR instructions
 			},
 			Layers: layers,

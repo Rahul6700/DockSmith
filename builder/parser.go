@@ -53,7 +53,7 @@ func ParseDocksmithfile(path string) ([]Instruction, error) {
 			if len(parts) < 2 {
 				return nil, fmt.Errorf("RUN requires a command at line %d", lineNum)
 			}
-			// strings.Join preserves spaces in the command eg -> "pip install flask" stays intact
+			// strings.Join preserves spaces in the command eg -> "apt-get install -y curl" stays intact
 			command := strings.Join(parts[1:], " ")
 			instructions = append(instructions, Instruction{
 				Type: RUN,
@@ -67,6 +67,28 @@ func ParseDocksmithfile(path string) ([]Instruction, error) {
 			instructions = append(instructions, Instruction{
 				Type: WORKDIR,
 				Args: parts[1:],
+			})
+
+		case "ENV":
+			// ENV must be in the format KEY=VALUE
+			// parts[1] is the whole "KEY=VALUE" token
+			if len(parts) != 2 || !strings.Contains(parts[1], "=") {
+				return nil, fmt.Errorf("ENV must be in format KEY=VALUE at line %d", lineNum)
+			}
+			instructions = append(instructions, Instruction{
+				Type: ENV,
+				Args: parts[1:], // eg -> ["PORT=8080"]
+			})
+
+		case "CMD":
+			if len(parts) < 2 {
+				return nil, fmt.Errorf("CMD requires a command at line %d", lineNum)
+			}
+			// strings.Join preserves spaces eg -> "python3 app.py" stays intact
+			command := strings.Join(parts[1:], " ")
+			instructions = append(instructions, Instruction{
+				Type: CMD,
+				Args: []string{command},
 			})
 
 		default:
