@@ -63,29 +63,68 @@ var buildCmd = &cobra.Command{
 		// stores the last CMD seen — last one wins
 		var cmdArgs []string
 
+		// prevDigest tracks the digest of the last produced layer
+		// it is used as part of the cache key for the next instruction
+		// starts empty because there is no previous layer before the first instruction
+		prevDigest := ""
+
 		// execute instructions
 		for i, inst := range instructions {
 			fmt.Printf("Step %d/%d : %s %s\n", i+1, len(instructions), inst.Type, strings.Join(inst.Args, " "))
 
 			switch inst.Type {
 			case builder.COPY:
-				// ExecuteCopy returns a full Layer struct with digest, size, createdBy
+				// compute cache key from previous layer + this instruction
+				// if the files being copied changed, the layer digest will differ on execution
+				// and a new cache entry will be stored
+				cacheKey := state.ComputeCacheKey(prevDigest, string(inst.Type), inst.Args)
+
+				if entry := state.GetCacheEntry(cacheKey); entry != nil {
+					// cache hit -> skip execution, reuse stored layer
+					fmt.Println("  --> cache hit")
+					layers = append(layers, entry.Layer)
+					prevDigest = entry.Layer.Digest
+					continue
+				}
+
+				// cache miss -> execute and store result
 				layer, err := builder.ExecuteCopy(inst.Args[0], inst.Args[1], contextDir, workDir)
 				if err != nil {
 					fmt.Println("COPY failed:", err)
 					return
 				}
+				if err := state.SetCacheEntry(cacheKey, layer); err != nil {
+					fmt.Println("Warning: failed to write cache entry:", err)
+				}
 				layers = append(layers, layer)
+				prevDigest = layer.Digest
 
 			case builder.RUN:
-				// ExecuteRun returns a full Layer struct with digest, size, createdBy
+				// env vars are part of the cache key too
+				// if you add a new ENV before this RUN, the key changes and cache is invalidated
+				cacheArgs := append(inst.Args, envVars...)
+				cacheKey := state.ComputeCacheKey(prevDigest, string(inst.Type), cacheArgs)
+
+				if entry := state.GetCacheEntry(cacheKey); entry != nil {
+					// cache hit -> skip execution, reuse stored layer
+					fmt.Println("  --> cache hit")
+					layers = append(layers, entry.Layer)
+					prevDigest = entry.Layer.Digest
+					continue
+				}
+
+				// cache miss -> execute and store result
 				// we pass envVars so the child process sees all accumulated ENV instructions
 				layer, err := builder.ExecuteRun(inst.Args[0], layers, workDir, envVars)
 				if err != nil {
 					fmt.Println("RUN failed:", err)
 					return
 				}
+				if err := state.SetCacheEntry(cacheKey, layer); err != nil {
+					fmt.Println("Warning: failed to write cache entry:", err)
+				}
 				layers = append(layers, layer)
+				prevDigest = layer.Digest
 
 			case builder.WORKDIR:
 				workDir = inst.Args[0]
@@ -143,3 +182,4 @@ func init() {
 	buildCmd.Flags().StringVarP(&tag, "tag", "t", "", "name:tag")
 	rootCmd.AddCommand(buildCmd)
 }
+
